@@ -1,0 +1,14 @@
+builds:
+  build:
+    context: /
+    dockerfile: tools/Dockerfile.build
+    extract:
+      - /go/bin/goexec:tools/goexec.tar
+
+  final:
+    context: tools/
+    dockerfile: Dockerfile.final
+    pushes:
+      - "on_branch:master=jizhilong/goexec:latest"
+    depends_on:
+      - build

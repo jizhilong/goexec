@@ -1,0 +1,7 @@
+FROM busybox
+MAINTAINER zlji <zlji@ctrip.com>
+
+ADD usage.sh /usr/bin/usage
+ADD install.sh /usr/bin/install
+
+ADD goexec.tar /usr/bin/

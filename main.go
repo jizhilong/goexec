@@ -13,10 +13,12 @@ import (
 	"github.com/jizhilong/goexec/docker-exec-gotty-backend"
 )
 
+var version = "undefined"
+
 func main() {
 	cmd := cli.NewApp()
 	cmd.Name = "goexec"
-	cmd.Version = "0.0.1"
+	cmd.Version = version
 	cmd.Usage = "Access terminal of docker containers as web application"
 	cmd.HideHelp = true
 	cli.AppHelpTemplate = helpTemplate

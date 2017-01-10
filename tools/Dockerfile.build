@@ -1,0 +1,8 @@
+FROM golang:1.6
+
+ENV CODEPATH /go/src/github.com/jizhilong/goexec
+RUN mkdir -p $CODEPATH
+WORKDIR $CODEPATH
+ADD . $CODEPATH
+ENV CGO_ENABLED=0
+RUN go install -v -ldflags '-extldflags "-static"' -ldflags "-X main.version=$(git describe --always --long --dirty)"
