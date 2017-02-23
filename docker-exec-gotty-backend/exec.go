@@ -5,12 +5,18 @@ import (
 	"io"
 	"log"
 	"net/url"
+	"strings"
 
 	"github.com/fsouza/go-dockerclient"
 	"github.com/yudai/gotty/backends"
 )
 
-var Command []string = []string{"env", "TERM=xterm-256color", "sh", "-c", "if command -v bash > /dev/null;then exec bash;else exec sh;fi"}
+type ContainerType int
+
+const (
+	LINUX ContainerType = iota
+	WINDOWS
+)
 
 type Options struct {
 }
@@ -21,13 +27,14 @@ type DockerExecClientContextManager struct {
 }
 
 type DockerExecClientContext struct {
-	docker       *docker.Client
-	containerId  string
-	exec         *docker.Exec
-	stdinReader  io.ReadCloser  // read by docker client
-	stdinWriter  io.WriteCloser // write by our code when proxying inputs from ws
-	stdoutReader io.ReadCloser  // read by our code, will be proxied to ws
-	stdoutWriter io.WriteCloser // write by docker client
+	docker        *docker.Client
+	containerId   string
+	exec          *docker.Exec
+	stdinReader   io.ReadCloser  // read by docker client
+	stdinWriter   io.WriteCloser // write by our code when proxying inputs from ws
+	stdoutReader  io.ReadCloser  // read by our code, will be proxied to ws
+	stdoutWriter  io.WriteCloser // write by docker client
+	containerType ContainerType
 }
 
 func NewContextManager(options *Options) *DockerExecClientContextManager {
@@ -47,6 +54,20 @@ func (mgr *DockerExecClientContextManager) New(params url.Values) (context backe
 		return nil, errors.New("multiple containers specified")
 	}
 	containerId := params["container"][0]
+	var command []string
+	var containerType ContainerType
+
+	container, err := mgr.docker.InspectContainer(containerId)
+	if err != nil {
+		return nil, err
+	}
+	if strings.Contains(container.GraphDriver.Name, "windows") {
+		containerType = WINDOWS
+		command = []string{"powershell"}
+	} else {
+		containerType = LINUX
+		command = []string{"env", "TERM=xterm-256color", "sh", "-c", "if command -v bash > /dev/null;then exec bash;else exec sh;fi"}
+	}
 
 	opts := docker.CreateExecOptions{
 		Container:    containerId,
@@ -54,7 +75,7 @@ func (mgr *DockerExecClientContextManager) New(params url.Values) (context backe
 		AttachStdout: true,
 		AttachStderr: true,
 		Tty:          true,
-		Cmd:          Command,
+		Cmd:          command,
 	}
 
 	if exec, err = mgr.docker.CreateExec(opts); err != nil {
@@ -64,13 +85,14 @@ func (mgr *DockerExecClientContextManager) New(params url.Values) (context backe
 	stdoutPipeReader, stdoutPipeWriter := io.Pipe()
 
 	context = &DockerExecClientContext{
-		docker:       mgr.docker,
-		containerId:  containerId,
-		exec:         exec,
-		stdinReader:  stdinPipeReader,
-		stdinWriter:  stdinPipeWriter,
-		stdoutReader: stdoutPipeReader,
-		stdoutWriter: stdoutPipeWriter,
+		docker:        mgr.docker,
+		containerId:   containerId,
+		exec:          exec,
+		stdinReader:   stdinPipeReader,
+		stdinWriter:   stdinPipeWriter,
+		stdoutReader:  stdoutPipeReader,
+		stdoutWriter:  stdoutPipeWriter,
+		containerType: containerType,
 	}
 	log.Printf("succedd to create docker exec")
 	return
@@ -118,7 +140,14 @@ func (context *DockerExecClientContext) ResizeTerminal(width, height uint16) err
 }
 
 func (context *DockerExecClientContext) TearDown() error {
-	exitKeySeq := []byte{4, 4}
+	var exitKeySeq []byte
+	if context.containerType == LINUX {
+		// linux sh/bash exit key sequence: <Ctrl-D><Ctrl-D>
+		exitKeySeq = []byte{4, 4}
+	} else {
+		// windows powershell exit key sequnce: <Ctrl-C>exit<Enter>
+		exitKeySeq = []byte{3, 101, 120, 105, 116, 13}
+	}
 	context.stdinWriter.Write(exitKeySeq)
 	context.stdinReader.Close()
 	context.stdoutWriter.Close()
