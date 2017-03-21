@@ -11,7 +11,7 @@ goexec -w
 another way is to run goexec inside a container.
 
 ```
-docker run -td --net host jizhilong/goexec goexec -w -p 8000
+docker run -td --net host -v /var/run/docker.sock:/var/run/docker.sock jizhilong/goexec goexec -w -p 8000
 # open http://<hostip>:8000/?container=<containerid> in your browser
 ```
 
